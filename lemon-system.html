@@ -1,0 +1,466 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LEMON System — tadiwa Mukudzavu</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --void:#04060d; --ink:#e8eef5; --dim:#7e8ba0; --line:rgba(255,255,255,.14); }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{background:var(--void);color:var(--ink);font-family:"Space Grotesk",system-ui,sans-serif;overflow-x:hidden}
+  canvas.gl{position:fixed;inset:0;z-index:0;display:block}
+  #track{position:relative;z-index:1;pointer-events:none}
+  .stage{height:110vh}
+  .hud{position:fixed;z-index:3;pointer-events:none}
+  .mono{font-family:"IBM Plex Mono",monospace;letter-spacing:.14em;text-transform:uppercase;font-size:10px;color:var(--dim)}
+
+  #brand{top:26px;left:28px}
+  #brand h1{font-size:15px;font-weight:700;letter-spacing:.02em}
+  #brand .sub{margin-top:5px}
+
+  #rail{top:50%;left:28px;transform:translateY(-50%);display:flex;flex-direction:column;gap:14px;pointer-events:auto}
+  .dot{display:flex;align-items:center;gap:10px;background:none;border:0;cursor:pointer;padding:0;font:inherit}
+  .dot i{width:9px;height:9px;border-radius:50%;background:currentColor;opacity:.3;transition:opacity .3s,transform .3s}
+  .dot.hollow i{background:none;border:1px solid currentColor}
+  .dot span{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);opacity:0;transform:translateX(-6px);transition:.3s}
+  .dot:hover span,.dot.on span{opacity:1;transform:none}
+  .dot.on i{opacity:1;transform:scale(1.5)}
+
+  #panel{right:34px;bottom:0;top:0;width:min(430px,44vw);display:flex;flex-direction:column;justify-content:center;gap:14px;
+         opacity:0;transform:translateY(14px);transition:opacity .5s,transform .5s}
+  #panel.on{opacity:1;transform:none}
+  #eyebrow{display:flex;align-items:baseline;gap:10px}
+  #idx{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.2em}
+  #name{font-size:44px;line-height:.95;font-weight:700;letter-spacing:-.02em;text-shadow:0 0 30px rgba(0,0,0,.6)}
+  #ask{font-size:22px;font-weight:500;font-style:italic;opacity:.9}
+  #body{font-size:14.5px;line-height:1.65;color:#c3ccd8;max-width:40ch;text-shadow:0 1px 8px rgba(0,0,0,.75)}
+  #panel.longread #body{font-size:13.5px;line-height:1.72;max-width:44ch}
+  .meter{margin-top:6px;border-top:1px solid var(--line);padding-top:12px}
+  .meter.hide{display:none}
+  .meter .row{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px}
+  .bar{height:3px;background:rgba(255,255,255,.09);position:relative;overflow:hidden}
+  .bar b{position:absolute;inset:0 100% 0 0;background:currentColor;transition:right 1s cubic-bezier(.16,1,.3,1)}
+  #tag{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase;margin-top:8px;color:var(--dim)}
+  #dist{position:fixed;bottom:24px;left:28px;z-index:3}
+  #dist .num{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink);letter-spacing:.1em}
+
+  #intro{inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:16px;transition:opacity .6s}
+  #intro h2{font-size:clamp(36px,7vw,84px);font-weight:700;letter-spacing:-.03em;line-height:.92}
+  #intro p{max-width:44ch;color:#aab5c4;font-size:15px;line-height:1.6}
+  #scrollcue{margin-top:12px;animation:bob 1.8s ease-in-out infinite}
+  @keyframes bob{0%,100%{transform:translateY(0);opacity:.5}50%{transform:translateY(6px);opacity:1}}
+
+  #outro{inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:18px;opacity:0;transition:opacity .6s}
+  #outro h2{font-size:clamp(24px,3.6vw,40px);font-weight:700;letter-spacing:-.02em;line-height:1.15}
+  #outro .grid{display:flex;gap:26px;flex-wrap:wrap;justify-content:center;margin-top:6px}
+  #outro .cell{text-align:left}
+  #outro .cell b{display:block;font-size:26px;font-weight:700}
+  #outro p{max-width:52ch;color:#aab5c4;font-size:14.5px;line-height:1.65}
+  .fade{opacity:0!important}
+  #vignette{position:fixed;inset:0;z-index:2;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(2,4,9,.55) 100%)}
+  #alarm{position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0;transition:opacity .8s;
+         box-shadow:inset 0 0 200px rgba(242,195,63,.09)}
+
+  @media (max-width:820px){
+    #panel{right:18px;left:18px;width:auto;bottom:5vh;top:auto;justify-content:flex-end}
+    #name{font-size:32px} #body{max-width:none;font-size:13px}
+    #panel.longread #body{font-size:12.5px;max-height:38vh;overflow:auto}
+    #rail{display:none} #dist{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){#scrollcue{animation:none}}
+</style>
+
+<div id="vignette"></div>
+<div id="alarm"></div>
+
+<div class="hud" id="brand">
+  <h1>LEMON SYSTEM</h1>
+  <div class="sub mono">tadiwa mukudzavu · self-assessment 14.07.26</div>
+</div>
+
+<div class="hud" id="rail"></div>
+
+<div class="hud" id="intro">
+  <div class="mono">five bodies · one hazard · scroll to fly</div>
+  <h2>You lead out<br>of your identity.</h2>
+  <p>Five leadership types. Everyone is a blend of all five, weighted differently. Fly the system, then face the one body you can't steer around.</p>
+  <div class="mono" id="scrollcue">↓ scroll to launch</div>
+</div>
+
+<div class="hud" id="panel">
+  <div id="eyebrow"><span id="idx" class="mono">01 / 05</span><span class="mono" id="world">world of ideas</span></div>
+  <div id="name">Luminary</div>
+  <div id="ask">Why?</div>
+  <div id="body"></div>
+  <div class="meter" id="meter">
+    <div class="row"><span class="mono">your score</span><span id="scoreval" class="mono">32 / 50</span></div>
+    <div class="bar" id="bar"><b></b></div>
+    <div id="tag"></div>
+  </div>
+</div>
+
+<div id="dist"><div class="mono">approach vector</div><div class="num" id="distval">—</div></div>
+
+<div class="hud" id="outro">
+  <div class="mono">flight complete</div>
+  <h2>Primary: Organizer.<br>Under pressure: Manager.</h2>
+  <div class="grid" id="scores"></div>
+  <p>My wiring isn't the problem. How maturely I handle it is.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const TYPES = [
+  { key:"L", name:"Luminary", color:0x5c93c4, hex:"#5c93c4", base:"#516d86", light:"#87a2b8", dark:"#2f4356",
+    world:"world of ideas", ask:"Why?", score:32,
+    body:"Lives upstream of everyone else. Longest focal length in the system: sees the destination years before the road exists. Work, to a Luminary, is thinking. Frustrating to be around when the rest of the room wants a deadline." },
+  { key:"E", name:"Entrepreneur", color:0x7cc06d, hex:"#7cc06d", base:"#688a5f", light:"#9cba93", dark:"#3a5233",
+    world:"world of opportunities", ask:"Why not?", score:35,
+    body:"Sees an opening and moves before the analysis is finished. Fast, verbal, frequent. Starts more than it finishes, and would rather buy the ticket than read the brochure. Every system needs one, and can rarely survive two." },
+  { key:"M", name:"Manager", color:0xf2c33f, hex:"#f2c33f", base:"#bda15a", light:"#e0cd97", dark:"#6e5a25",
+    world:"world of systems", ask:"How?", score:37,
+    body:"Nothing starts until there's a plan; everything before the plan is just activity. Level-headed, process-first, builds people and structures that outlast the moment. My second slice, which means it's also where I go when the pressure comes on." },
+  { key:"O", name:"Organizer", color:0xf39a4a, hex:"#f39a4a", base:"#c08d5c", light:"#e6bd92", dark:"#6f4b28",
+    world:"world of tasks", ask:"What?", score:45,
+    body:"My primary. The intuitive fixer. I carry a mental catalogue of loose ends and cut straight to the critical path to closure. I read the people issues as fast as the task issues: who's on board, who has authority, who's quietly unhappy. I'd rather ship a 70% fix now and redo it later than leave anything hanging open." },
+  { key:"N", name:"Networker", color:0xe4622e, hex:"#e4622e", base:"#a76a4e", light:"#d09a7c", dark:"#5d3121",
+    world:"world of connections", ask:"Who?", score:35,
+    body:"Weaves. Knows who to call, and what those two strangers would do for each other if they ever met. Currency is the introduction, not the plan. Whatever it takes, whenever it's needed." }
+];
+
+/* The sixth body. Not a type — a hazard. Sits dead centre on the flight path. */
+const HAZARD = {
+  key:"X", name:"The Bad Day", color:0xf2c33f, hex:"#f2c33f",
+  base:"#6b4a1a", light:"#a07b32", dark:"#241a08",   // an eclipsed Organizer: same fruit, no light on it
+  world:"course correction", ask:"So what do I do about it?", score:null,
+  body:"My weakness comes out when I'm under pressure. As an Organizer, I like to fix things fast. The problem is that a quick fix is often only good enough for today, and it becomes someone's headache later. When the stress really builds, I fall back into my second type, Manager, and I go stiff and cold. I start hiding behind rules and procedures instead of just talking to people. To get better at this, I have to slow down at the exact moment I feel like rushing. That means writing down my temporary fixes and giving each one a person and a date so they actually get done properly. It also means taking a bit of time to plan before I jump in, instead of trusting my gut every time. And when I'm stressed, I need to stay human: ask instead of order, explain the reason instead of pointing at the rule. It helps to have people around me who think differently, like a Luminary who keeps asking why we're doing something in the first place, and I need to actually listen when they do. In the end, my wiring isn't the problem. How maturely I handle it is."
+};
+
+const BODIES = TYPES.concat([HAZARD]);
+const HAZ = BODIES.length-1;
+const SPACING = 46, PRIMARY = 3, SECONDARY = 2;
+
+/* ---------- procedural citrus skin ---------- */
+function hexA(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+function makeCitrusMaps(base,light,dark){
+  const W=1024,H=512;
+  const cv=document.createElement('canvas');cv.width=W;cv.height=H;const cx=cv.getContext('2d');
+  cx.fillStyle=base;cx.fillRect(0,0,W,H);
+  for(let i=0;i<260;i++){const x=Math.random()*W,y=Math.random()*H,r=30+Math.random()*90;
+    const g=cx.createRadialGradient(x,y,0,x,y,r);const c=Math.random()<.5?light:dark;
+    g.addColorStop(0,hexA(c,.05+Math.random()*.07));g.addColorStop(1,hexA(c,0));
+    cx.fillStyle=g;cx.beginPath();cx.arc(x,y,r,0,7);cx.fill();}
+  for(let i=0;i<9000;i++){const x=Math.random()*W,y=Math.random()*H,r=Math.random()*1.6;
+    cx.fillStyle=hexA(Math.random()<.5?light:dark,.05+Math.random()*.08);
+    cx.beginPath();cx.arc(x,y,r,0,7);cx.fill();}
+  const bv=document.createElement('canvas');bv.width=W;bv.height=H;const bx=bv.getContext('2d');
+  bx.fillStyle='#808080';bx.fillRect(0,0,W,H);
+  for(let i=0;i<160;i++){const x=Math.random()*W,y=Math.random()*H,r=40+Math.random()*110;
+    const g=bx.createRadialGradient(x,y,0,x,y,r);const v=Math.random()<.5?'#8e8e8e':'#727272';
+    g.addColorStop(0,hexA(v,.35));g.addColorStop(1,hexA(v,0));
+    bx.fillStyle=g;bx.beginPath();bx.arc(x,y,r,0,7);bx.fill();}
+  for(let i=0;i<4200;i++){
+    const x=Math.random()*W,y=Math.random()*H,r=1.2+Math.random()*3.4;
+    const pit=bx.createRadialGradient(x,y,0,x,y,r);
+    pit.addColorStop(0,'rgba(30,30,30,.85)');pit.addColorStop(.55,'rgba(90,90,90,.4)');
+    pit.addColorStop(.8,'rgba(200,200,200,.35)');pit.addColorStop(1,'rgba(128,128,128,0)');
+    bx.fillStyle=pit;bx.beginPath();bx.arc(x,y,r,0,7);bx.fill();
+    const cc=cx.createRadialGradient(x,y,0,x,y,r);
+    cc.addColorStop(0,hexA(dark,.35));cc.addColorStop(1,hexA(dark,0));
+    cx.fillStyle=cc;cx.beginPath();cx.arc(x,y,r,0,7);cx.fill();}
+  const rv=document.createElement('canvas');rv.width=W;rv.height=H;const rx=rv.getContext('2d');
+  rx.fillStyle='#b8b8b8';rx.fillRect(0,0,W,H);
+  for(let i=0;i<2600;i++){const x=Math.random()*W,y=Math.random()*H,r=1+Math.random()*4;
+    rx.fillStyle='rgba(70,70,70,.5)';rx.beginPath();rx.arc(x,y,r,0,7);rx.fill();}
+  const map=new THREE.CanvasTexture(cv),bump=new THREE.CanvasTexture(bv),rough=new THREE.CanvasTexture(rv);
+  [map,bump,rough].forEach(t=>{t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;});
+  return {map,bump,rough};
+}
+
+/* ---------- scene ---------- */
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x04060d,0.007);
+const camera=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,0.1,900);
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setSize(innerWidth,innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.domElement.classList.add('gl');
+document.body.appendChild(renderer.domElement);
+
+scene.add(new THREE.AmbientLight(0x3d4552,0.42));
+const sun=new THREE.PointLight(0xfff6e6,2.1,0,1.55);
+sun.position.set(30,24,30);scene.add(sun);
+const rim=new THREE.DirectionalLight(0x9fb4cc,0.4);
+rim.position.set(-20,-8,-14);scene.add(rim);
+
+(function flare(){
+  const c=document.createElement('canvas');c.width=c.height=256;const x=c.getContext('2d');
+  const g=x.createRadialGradient(128,128,0,128,128,128);
+  g.addColorStop(0,'rgba(255,245,220,.9)');g.addColorStop(.25,'rgba(255,230,180,.35)');g.addColorStop(1,'rgba(255,230,180,0)');
+  x.fillStyle=g;x.fillRect(0,0,256,256);
+  const s=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false}));
+  s.scale.setScalar(60);s.position.copy(sun.position).multiplyScalar(2.2);scene.add(s);
+})();
+
+function starLayer(count,spread,size,opacity){
+  const pos=new Float32Array(count*3);
+  for(let i=0;i<count;i++){
+    pos[i*3]=(Math.random()-.5)*spread;
+    pos[i*3+1]=(Math.random()-.5)*spread*.7;
+    pos[i*3+2]=40-Math.random()*(SPACING*BODIES.length+220);
+  }
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const p=new THREE.Points(g,new THREE.PointsMaterial({color:0xffffff,size,sizeAttenuation:true,transparent:true,opacity}));
+  scene.add(p);return p;
+}
+starLayer(2200,340,.35,.55);
+const nearStars=starLayer(900,200,.7,.9);
+
+function nebulaSprite(hex){
+  const c=document.createElement('canvas');c.width=c.height=512;const x=c.getContext('2d');
+  for(let i=0;i<26;i++){const px=100+Math.random()*312,py=100+Math.random()*312,r=60+Math.random()*140;
+    const g=x.createRadialGradient(px,py,0,px,py,r);
+    g.addColorStop(0,hexA(hex,.02+Math.random()*.025));g.addColorStop(1,hexA(hex,0));
+    x.fillStyle=g;x.beginPath();x.arc(px,py,r,0,7);x.fill();}
+  return new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.4}));
+}
+BODIES.forEach((t,i)=>{
+  const n=nebulaSprite(t.hex);
+  n.scale.set(140,140,1);
+  n.position.set((i%2?-1:1)*40,(Math.random()-.5)*30,-i*SPACING-30);
+  scene.add(n);
+});
+
+const dust=(function(){
+  const N=700,pos=new Float32Array(N*3);
+  for(let i=0;i<N;i++){pos[i*3]=(Math.random()-.5)*40;pos[i*3+1]=(Math.random()-.5)*26;
+    pos[i*3+2]=30-Math.random()*(SPACING*BODIES.length+120);}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  const p=new THREE.Points(g,new THREE.PointsMaterial({color:0xaCC4e8,size:.09,sizeAttenuation:true,transparent:true,opacity:.5}));
+  scene.add(p);return p;
+})();
+
+/* ---------- lemon body ---------- */
+function lemonGeometry(){
+  const pts=[],STEPS=110;
+  for(let i=0;i<=STEPS;i++){
+    const t=i/STEPS, y=(t-.5)*2.55;
+    let r=Math.pow(Math.sin(Math.PI*t),.42)*1.34;
+    r+=.07*Math.exp(-Math.pow((t-0)/.05,2));
+    r+=.09*Math.exp(-Math.pow((t-1)/.055,2));
+    pts.push(new THREE.Vector2(Math.max(r,.03),y));
+  }
+  const g=new THREE.LatheGeometry(pts,128);g.computeVertexNormals();return g;
+}
+const LEMON=lemonGeometry();
+
+function atmosphere(colorHex,scale,power,strength){
+  const m=new THREE.ShaderMaterial({
+    uniforms:{c:{value:new THREE.Color(colorHex)},p:{value:power},s:{value:strength}},
+    vertexShader:`varying float vI; uniform float p;
+      void main(){ vec3 n=normalize(normalMatrix*normal);
+        vec3 v=normalize((modelViewMatrix*vec4(position,1.)).xyz);
+        vI=pow(1.0-abs(dot(n,-v)),p);
+        gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
+    fragmentShader:`uniform vec3 c; uniform float s; varying float vI;
+      void main(){ gl_FragColor=vec4(c,vI*s); }`,
+    transparent:true,blending:THREE.AdditiveBlending,side:THREE.BackSide,depthWrite:false
+  });
+  const mesh=new THREE.Mesh(LEMON,m);
+  mesh.scale.setScalar(scale*1.12);
+  return mesh;
+}
+
+function sliceRing(color){
+  const g=new THREE.Group();
+  const ring=new THREE.Mesh(new THREE.RingGeometry(2.15,3.3,128,1),
+    new THREE.MeshBasicMaterial({color,side:THREE.DoubleSide,transparent:true,opacity:.08}));
+  ring.rotation.x=Math.PI/2;g.add(ring);
+  for(let i=0;i<10;i++){
+    const a=(i/10)*Math.PI*2;
+    const seg=new THREE.Mesh(new THREE.BoxGeometry(1.1,.02,.045),
+      new THREE.MeshBasicMaterial({color,transparent:true,opacity:.3}));
+    seg.position.set(Math.cos(a)*2.72,0,Math.sin(a)*2.72);seg.rotation.y=-a;g.add(seg);
+  }
+  return g;
+}
+
+function moons(color,n,radius){
+  const g=new THREE.Group(), geo=new THREE.SphereGeometry(.09,10,8);
+  for(let i=0;i<n;i++){
+    const m=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color,roughness:.85,emissive:color,emissiveIntensity:.08}));
+    m.userData={a:Math.random()*Math.PI*2,r:radius*(.9+Math.random()*.35),s:.3+Math.random()*.5,y:(Math.random()-.5)*.7};
+    g.add(m);
+  }
+  return g;
+}
+
+/* the cage: rigid policy gridlines that lock around the hazard */
+function policyCage(color,scale){
+  const g=new THREE.Group();
+  const mat=new THREE.LineBasicMaterial({color,transparent:true,opacity:.42});
+  const cage=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.IcosahedronGeometry(scale*1.55,1)),mat);
+  g.add(cage);
+  const box=new THREE.LineSegments(
+    new THREE.EdgesGeometry(new THREE.BoxGeometry(scale*2.9,scale*2.9,scale*2.9)),
+    new THREE.LineBasicMaterial({color,transparent:true,opacity:.22}));
+  g.add(box);
+  return g;
+}
+
+const planets=[];
+BODIES.forEach((t,i)=>{
+  const isHaz=(i===HAZ);
+  const grp=new THREE.Group();
+  const scale=isHaz?1.62:0.72+(t.score/45)*0.9;
+  const side=isHaz?1:(i%2?1:-1);
+  const maps=makeCitrusMaps(t.base,t.light,t.dark);
+
+  const skin=new THREE.Mesh(LEMON,new THREE.MeshStandardMaterial({
+    map:maps.map,bumpMap:maps.bump,bumpScale:isHaz?.075:.05,
+    roughnessMap:maps.rough,roughness:isHaz?1:.95,metalness:.02,
+    emissive:t.color,emissiveIntensity:isHaz?.01:.02
+  }));
+  skin.scale.setScalar(scale);skin.rotation.z=.28*side;grp.add(skin);
+
+  const atmo=atmosphere(t.color,scale,isHaz?4.6:3.6,isHaz?.5:.22);
+  atmo.rotation.z=.28*side;grp.add(atmo);
+
+  if(!isHaz){
+    const ring=sliceRing(t.color);
+    ring.scale.setScalar(scale*.92);ring.rotation.z=.42*side;ring.rotation.x=.16;grp.add(ring);
+    const mns=moons(t.color,2+Math.round(t.score/15),scale*3.9);grp.add(mns);
+    grp.position.set(side*5.6,(i%2?1.4:-1.6),-i*SPACING);
+    grp.userData={skin,ring,atmo,mns,side,i,isHaz};
+  }else{
+    const cage=policyCage(t.color,scale);grp.add(cage);
+    grp.position.set(0,0,-i*SPACING);                 // dead centre: unavoidable
+    grp.userData={skin,atmo,cage,side,i,isHaz};
+  }
+  scene.add(grp);planets.push(grp);
+});
+
+/* ---------- scroll rig ---------- */
+const track=document.createElement('div');track.id='track';
+const total=BODIES.length+2;                          // intro + 6 bodies + outro
+for(let i=0;i<total;i++){const d=document.createElement('div');d.className='stage';track.appendChild(d);}
+document.body.appendChild(track);
+
+const panel=document.getElementById('panel'),rail=document.getElementById('rail'),
+      elName=document.getElementById('name'),elAsk=document.getElementById('ask'),
+      elBody=document.getElementById('body'),elIdx=document.getElementById('idx'),
+      elWorld=document.getElementById('world'),elBar=document.querySelector('#bar b'),
+      elVal=document.getElementById('scoreval'),elTag=document.getElementById('tag'),
+      elMeter=document.getElementById('meter'),intro=document.getElementById('intro'),
+      outro=document.getElementById('outro'),distEl=document.getElementById('distval'),
+      alarm=document.getElementById('alarm');
+
+BODIES.forEach((t,i)=>{
+  const b=document.createElement('button');
+  b.className='dot'+(i===HAZ?' hollow':'');
+  b.style.color=t.hex;
+  b.innerHTML=`<i></i><span>${i===HAZ?'Bad day':t.name}</span>`;
+  b.onclick=()=>{const max=document.body.scrollHeight-innerHeight;
+    scrollTo({top:((i+1)/(total-1))*max,behavior:'smooth'});};
+  rail.appendChild(b);
+});
+const dots=[...rail.children];
+
+document.getElementById('scores').innerHTML=TYPES.map(t=>
+  `<div class="cell"><div class="mono">${t.name}</div><b style="color:${t.hex}">${t.score}</b></div>`).join('');
+
+let active=-1;
+function show(i){
+  if(i===active)return;
+  active=i;
+  dots.forEach((d,k)=>d.classList.toggle('on',k===i));
+  alarm.style.opacity = i===HAZ ? 1 : 0;
+  if(i<0){panel.classList.remove('on');return;}
+  const t=BODIES[i];
+  panel.classList.toggle('longread', i===HAZ);
+  elIdx.textContent = i===HAZ ? 'HAZARD' : `0${i+1} / 05`;
+  elIdx.style.color=t.hex;
+  elWorld.textContent=t.world;
+  elName.textContent=t.name;elName.style.color=t.hex;
+  elAsk.textContent=t.ask;
+  elBody.textContent=t.body;
+  if(t.score==null){ elMeter.classList.add('hide'); }
+  else{
+    elMeter.classList.remove('hide');
+    elVal.textContent=`${t.score} / 50`;
+    elMeter.style.color=t.hex;
+    elBar.parentElement.style.color=t.hex;
+    elBar.style.right=`${100-(t.score/50)*100}%`;
+    elTag.textContent = i===PRIMARY?"★ primary slice — where I live on a good day"
+                      : i===SECONDARY?"△ secondary slice — where I go under pressure":"";
+  }
+  panel.classList.add('on');
+}
+
+let target=0,current=0,velocity=0;
+function onScroll(){
+  const max=document.body.scrollHeight-innerHeight;
+  const p=Math.min(Math.max(scrollY/max,0),1);
+  target=p*(total-1);
+  intro.classList.toggle('fade',target>.45);
+  const atEnd=target>total-1.35;
+  outro.style.opacity=atEnd?1:0;
+  const idx=Math.round(target-1);
+  const near=Math.abs((target-1)-idx)<.45;
+  show(!atEnd&&near&&idx>=0&&idx<BODIES.length?idx:-1);
+}
+addEventListener('scroll',onScroll,{passive:true});
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);onScroll();});
+
+const clock=new THREE.Clock();
+(function loop(){
+  requestAnimationFrame(loop);
+  const dt=clock.getDelta(),t=clock.elapsedTime,prev=current;
+  current+=(target-current)*Math.min(dt*3.4,1);
+  velocity=Math.abs(current-prev)/Math.max(dt,1e-4);
+
+  const stage=current-1;
+  const hazNear=Math.max(0,1-Math.abs(stage-HAZ));      // 0..1 as the bad day closes in
+
+  camera.position.z=16-stage*SPACING;
+  // the hazard drags the flight path back to centre: no swooping past this one
+  const sway=1-hazNear;
+  camera.position.x=Math.sin(current*.9)*2.2*sway + Math.sin(t*7)*.012*Math.min(velocity,2) + Math.sin(t*23)*.03*hazNear;
+  camera.position.y=Math.cos(current*.7)*1.1*sway + Math.cos(t*9)*.010*Math.min(velocity,2) + Math.cos(t*19)*.03*hazNear;
+  camera.lookAt(0,0,camera.position.z-18);
+  camera.fov=52+Math.min(velocity,1.6)*4+hazNear*3;     // pressure narrows the view
+  camera.updateProjectionMatrix();
+
+  scene.fog.density=0.007+hazNear*0.006;
+
+  planets.forEach(p=>{
+    const {skin,ring,atmo,mns,cage,side,i,isHaz}=p.userData;
+    skin.rotation.y+=dt*(isHaz?0.035:0.10+0.025*i)*side; // the bad day turns slowly, heavily
+    atmo.rotation.y=skin.rotation.y;
+    if(ring)ring.rotation.y-=dt*.09*side;
+    if(mns)mns.children.forEach(m=>{
+      m.userData.a+=dt*m.userData.s*side;
+      m.position.set(Math.cos(m.userData.a)*m.userData.r,
+                     m.userData.y+Math.sin(m.userData.a*1.7)*.15,
+                     Math.sin(m.userData.a)*m.userData.r);
+    });
+    if(cage){ cage.rotation.y-=dt*.06; cage.rotation.x=Math.sin(t*.2)*.1; }
+    if(!isHaz){
+      const pull=Math.max(0,1-Math.abs(stage-i));
+      p.position.x=side*(5.6-pull*3.1);
+      p.position.y+=Math.sin(t*.5+i)*.006;
+    }
+  });
+
+  nearStars.material.opacity=.7+Math.sin(t*2.3)*.15;
+
+  const idx=Math.max(0,Math.min(BODIES.length-1,Math.round(stage)));
+  const dz=Math.abs(camera.position.z-(-idx*SPACING+16));
+  distEl.textContent = stage<-.3 ? '— standby —'
+    : (idx===HAZ ? `HAZARD · ${Math.max(0,dz*1000|0).toLocaleString()} km · brace`
+                 : `${BODIES[idx].key}-${idx+1} · ${Math.max(0,dz*1000|0).toLocaleString()} km`);
+
+  renderer.render(scene,camera);
+})();
+onScroll();
+</script>
